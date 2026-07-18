@@ -35,6 +35,7 @@ internal fun IsolateHolderService.startLocatorService(context: Context) {
                 // Flutter engine without any view
                 Log.e("IsolateHolderService", "startLocatorService: Start Flutter Engine")
                 IsolateHolderService.backgroundEngine = FlutterEngine(context)
+                registerAppPlugins(IsolateHolderService.backgroundEngine!!)
 
                 val callbackHandle = context.getSharedPreferences(
                     Keys.SHARED_PREFERENCES_KEY,
@@ -79,6 +80,22 @@ internal fun IsolateHolderService.startLocatorService(context: Context) {
         } catch (e: RuntimeException) {
             e.printStackTrace()
         }
+    }
+}
+
+// io.flutter.plugins.GeneratedPluginRegistrant se genera dentro del módulo `app` de cada
+// proyecto consumidor — este módulo (una librería Android normal) no puede importarla en tiempo
+// de compilación, así que se resuelve por reflexión. Sin este registro, el FlutterEngine que
+// corre el callback de background queda sin ningún plugin de canal de plataforma registrado
+// (shared_preferences, path_provider, etc.) y cualquier llamada a esos plugins revienta con
+// MissingPluginException dentro del callback del usuario, en silencio si el caller no lo loguea.
+private fun registerAppPlugins(engine: FlutterEngine) {
+    try {
+        val registrantClass = Class.forName("io.flutter.plugins.GeneratedPluginRegistrant")
+        val registerWith = registrantClass.getMethod("registerWith", FlutterEngine::class.java)
+        registerWith.invoke(null, engine)
+    } catch (e: Exception) {
+        Log.e("IsolateHolderExtension", "Failed to register app plugins on background engine", e)
     }
 }
 
