@@ -43,6 +43,34 @@ the plugin's public Dart API, only its Android build config and one internal Kot
 
 If you fork this fork and see one of the errors above, these three fixes are the whole diff.
 
+### App plugins not registered on the background `FlutterEngine` (Android)
+
+The background isolate runs on a separate `FlutterEngine(context)` created by
+`IsolateHolderService`/`startLocatorService`. Upstream, this engine never registered the consuming
+app's Flutter plugins (`GeneratedPluginRegistrant`) — any plugin with a platform channel used inside
+your callback (`shared_preferences`, `path_provider`, etc.) throws `MissingPluginException`, silently
+if your callback doesn't log the caught exception. This fork calls
+`io.flutter.plugins.GeneratedPluginRegistrant.registerWith(engine)` via reflection right after
+creating the engine (`IsolateHolderExtension.kt`, `registerAppPlugins`) — reflection because that
+class is generated inside the consuming app's own module, not a compile-time dependency of this
+plugin module. Look for `IsolateHolderExtension: App plugins registered on background engine OK` in
+logcat to confirm it worked (or the `Failed to register...` line, which now also logs `Throwable`
+instead of just `Exception` — `Class.forName`/`invoke` can throw `Error` subclasses too, which used
+to escape silently and abort the whole engine startup before ever running your Dart callback).
+
+### `BackgroundLocator.initialize()` is required before `registerLocationUpdate()`
+
+This one lives entirely on the Dart side, but it's the #1 reason "nothing happens" after everything
+above is fixed: `initialize()` is what persists the `callbackDispatcher` handle into native
+`SharedPreferences`. Skip it and `IsolateHolderService` logs `Fatal: failed to find callback` and
+returns *before* calling `executeDartCallback` — your background isolate never starts, so no print
+statement in your callback ever runs, not even the first line. Always call:
+
+```dart
+await BackgroundLocator.initialize();
+await BackgroundLocator.registerLocationUpdate(yourCallback, ...);
+```
+
 ## Usage with this fork
 
 To use this fork in your Flutter project, add the following to your `pubspec.yaml`:
