@@ -94,7 +94,12 @@ private fun registerAppPlugins(engine: FlutterEngine) {
         val registrantClass = Class.forName("io.flutter.plugins.GeneratedPluginRegistrant")
         val registerWith = registrantClass.getMethod("registerWith", FlutterEngine::class.java)
         registerWith.invoke(null, engine)
-    } catch (e: Exception) {
+        Log.e("IsolateHolderExtension", "App plugins registered on background engine OK")
+    } catch (e: Throwable) {
+        // Throwable, no Exception: Class.forName/invoke pueden lanzar Error
+        // (NoClassDefFoundError, etc.), no solo Exception — con catch (e: Exception)
+        // ese caso se escapa sin loguearse y aborta todo startLocatorService en
+        // silencio (el catch de más arriba solo atrapa UnsatisfiedLinkError).
         Log.e("IsolateHolderExtension", "Failed to register app plugins on background engine", e)
     }
 }
