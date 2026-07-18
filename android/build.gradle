@@ -1,10 +1,10 @@
-group 'yukams.app.background_locator_2'
-version '1.0-SNAPSHOT'
-
 plugins {
     id 'com.android.library'
     id 'org.jetbrains.kotlin.android'
 }
+
+group 'yukams.app.background_locator_2'
+version '1.0-SNAPSHOT'
 
 android {
     namespace 'yukams.app.background_locator_2'
