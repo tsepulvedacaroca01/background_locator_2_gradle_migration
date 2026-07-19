@@ -75,6 +75,31 @@ Si alguna vez hay que debuggear "no me llega nada al callback pero el servicio a
 estos dos `catch` son sospechosos directos — agregar `Log.e(..., e)` ahí (como ya se hizo en
 `registerAppPlugins`, ver `docs/android.md`) antes de asumir que el problema está en otro lado.
 
+## `example/` no resuelve en un SDK Dart moderno — usar `--no-example`
+
+`flutter pub get`/`flutter test` en la raíz de este repo intentan resolver también las
+dependencias de `example/` (comportamiento estándar de Flutter para packages de tipo plugin, para
+que `cd example && flutter run` funcione solo). Eso falla en cualquier SDK Dart actual (probado
+con 3.12.2) por dos motivos apilados en `example/pubspec.yaml`:
+
+1. `environment.sdk: ">=2.8.0 <3.0.0"` — el lower bound (2.8.0) es anterior a null safety
+   (mínimo 2.12.0); Dart 3.x ya no tiene modo legacy, así que rechaza la resolución directo.
+2. Aunque se suba ese lower bound a 2.12.0, `location_permissions: ^3.0.0+1` (dependencia del
+   example) tampoco soporta null safety en ninguna versión `<4.0.0` — haría falta migrar el
+   example completo a `permission_handler` (como ya usa `docs/android.md`/`docs/ios.md` del lado
+   nativo) para que compile en un SDK moderno. No se hizo — está fuera del alcance de mantener la
+   librería en sí, el `example/` es solo referencia de uso del API.
+
+**Workaround, no fix** — correr todo con `--no-example`:
+
+```sh
+flutter pub get --no-example
+flutter test
+```
+
+`flutter test` reusa la resolución ya hecha por ese `pub get` y no vuelve a intentar tocar
+`example/` mientras `pubspec.lock`/`.dart_tool/package_config.json` del root sigan al día.
+
 ## Metadata del `pubspec.yaml` apunta a otro fork
 
 `homepage`/`repository` apuntan a `sultan18kh/background_locator_2_gradle_migration` e
