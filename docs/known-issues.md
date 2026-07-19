@@ -1,10 +1,14 @@
 # Gotchas conocidos de este fork
 
-Los tres primeros ya están documentados en `README.md` (público, en inglés — no duplicar el texto
-acá, solo indexarlos). El resto son hallazgos hechos auditando este repo que **todavía no están en
-el README**.
+Los primeros ya están documentados en `README.md` (público, en inglés). El resto son hallazgos
+hechos auditando este repo que **todavía no están en el README** — por ahora solo importan a quien
+mantiene este fork, no a un consumidor.
 
 ## Ya documentados en README.md
+
+No duplicar el texto acá — solo indexarlos y, si hace falta, agregar detalle de diagnóstico interno
+que no le sirve a un consumidor pero sí a quien mantenga este repo (línea de código exacta, cómo se
+encontró, cómo se verificó).
 
 1. **AGP 9 / Gradle 9** — `jcenter()` legacy, orden del bloque `plugins {}`, tipado explícito de
    `hashMapOf<Any, Any>()` (§ "AGP 9 / Gradle 9 compatibility").
@@ -13,20 +17,22 @@ el README**.
    Ver `docs/android.md`.
 3. **`BackgroundLocator.initialize()` obligatorio antes de `registerLocationUpdate()`** — sin esto
    el isolate nunca arranca (§ "BackgroundLocator.initialize() is required...").
+4. **`FOREGROUND_SERVICE_LOCATION` requerido en Android 14+** — sin este permiso en el manifest del
+   consumidor, `IsolateHolderService.onCreate()` revienta con `SecurityException` en cualquier app
+   con `targetSdk >= 34` (§ "`FOREGROUND_SERVICE_LOCATION` required on Android 14+"). Ver también
+   `docs/android.md` § Permisos requeridos en el manifest del consumidor.
+5. **Gson `TypeToken` roto por R8** — resuelto con `android/consumer-rules.pro`
+   (`consumerProguardFiles`), heredado automáticamente por cualquier consumidor (§ "Gson/R8 crash
+   fixed automatically..."). Detalle de diagnóstico abajo.
+6. **`initCallback` nunca se ejecutaba** (`BCM_INIT`) — `TypeError` silencioso por un `Map` sin
+   castear (§ "`initCallback` fix — was silently never firing"). Detalle de diagnóstico abajo.
 
-## Gson `TypeToken` roto por R8 en apps consumidoras que minifican (Android)
+### Detalle de diagnóstico — Gson `TypeToken` + R8 (ítem 5)
 
-`PreferencesManager.kt:207`:
-
-```kotlin
-val type = object : TypeToken<Map<*, *>>() {}.type
-return Gson().fromJson(initialDataStr, type)
-```
-
-Esto lee `initDataCallback` (el `Map` que el usuario pasa a `registerLocationUpdate()`, ejecutado
-por `InitPluggable.onServiceStart`). El patrón `TypeToken` anónimo necesita que R8/ProGuard
-conserve la firma genérica del subtipo anónimo — sin eso, Gson no puede resolver el `Map<*, *>` en
-runtime y tira:
+`PreferencesManager.kt:207` (`object : TypeToken<Map<*, *>>() {}.type` — lee `initDataCallback` en
+`InitPluggable.onServiceStart`). **Confirmado en producción**: una app consumidora tenía este crash
+exacto en `app-release.apk` — el foreground service moría apenas arrancaba, nunca en modo debug (R8
+no corre en debug). Diagnosticado con `adb logcat` + reproducción en dispositivo real:
 
 ```
 java.lang.RuntimeException: Missing type parameter.
@@ -35,28 +41,32 @@ java.lang.RuntimeException: Missing type parameter.
 	at ... IsolateHolderService.onStartCommand(...)
 ```
 
-**Confirmado en producción**: una app consumidora de este fork tenía este crash exacto en
-`app-release.apk` — el foreground service moría en cuanto arrancaba, apenas después de que la app
-empezaba a trackear ubicación, y nunca en modo debug (R8 no corre en debug). Diagnosticado con
-`adb logcat` + reproducción en dispositivo real.
+Verificado el fix con un build real (`flutter build apk --release` de una app consumidora
+apuntando a este módulo por `path:`) — R8 corre y el resultado sigue siendo un APK instalable. Si
+una app consumidora ya tenía este workaround copiado a mano en su propio
+`android/app/proguard-rules.pro` (necesario con versiones de este fork anteriores a este fix),
+ahora es redundante.
 
-**Resuelto** (`android/consumer-rules.pro`, referenciado desde `android/build.gradle` vía
-`consumerProguardFiles`): cualquier app que consuma este plugin hereda estas reglas
-automáticamente, minifique o no, sin tener que redescubrir el crash. Verificado con un build real
-(`flutter build apk --release` de una app consumidora apuntando a este módulo por `path:`) — R8
-corre y el resultado sigue siendo un APK instalable.
+### Detalle de diagnóstico — `initCallback` / `BCM_INIT` (ítem 6)
 
-```proguard
--keepattributes Signature
--keepattributes *Annotation*
--keep,allowobfuscation,allowshrinking class com.google.gson.reflect.TypeToken
--keep,allowobfuscation,allowshrinking class * extends com.google.gson.reflect.TypeToken
--keep class yukams.app.background_locator_2.** { *; }
+`lib/callback_dispatcher.dart`, rama `BCM_INIT`. Error exacto en runtime (para buscarlo en logs si
+reaparece en otro punto del código):
+
+```
+type '_Map<Object?, Object?>' is not a subtype of type 'Map<String, dynamic>' of 'data'
 ```
 
-Si una app consumidora ya tenía este mismo workaround copiado a mano en su propio
-`android/app/proguard-rules.pro` (necesario con versiones de este fork anteriores a este fix),
-ahora es redundante — se puede simplificar o quitar, `consumerProguardFiles` ya lo cubre.
+Sin ningún log — el `TypeError` ocurre dentro del handler de `setMethodCallHandler`, en un `Future`
+que nadie espera ni captura, así que el callback del usuario simplemente nunca corría, en silencio.
+`example/lib/location_callback_handler.dart` no lo mostraba porque declara su `initCallback` con el
+tipo más laxo `Map<dynamic, dynamic>` en vez del tipo público documentado — tapaba el bug por
+accidente, no lo evitaba a propósito.
+
+**Encontrado escribiendo `test/callback_dispatcher_test.dart`** (ver `docs/testing.md`) — el mismo
+patrón de "un test nuevo revela un bug real" que ya pasó con el fix de plugins no registrados.
+Resuelto con `Map<String, dynamic>.from(args[Keys.ARG_INIT_DATA_CALLBACK] as Map? ?? {})` antes de
+invocar — sigue siendo válido para un consumidor que declaró su `initCallback` con el tipo laxo
+(`Map<String, dynamic>` es asignable a `Map<dynamic, dynamic>`), así que no rompe a `example/`.
 
 ## `catch` silenciosos sin loguear (Android) — resuelto
 
@@ -73,35 +83,6 @@ ahora loguean con `Log.e`, mismo criterio que `registerAppPlugins` (`docs/androi
 
 Si en el futuro se agrega un `catch` nuevo en código nativo de este repo, seguir el mismo patrón
 — nunca un `catch` mudo (ver `CLAUDE.md` § Convenciones).
-
-## `BCM_INIT` — `initCallback` nunca recibía un `Map<String, dynamic>` real (resuelto)
-
-`lib/callback_dispatcher.dart`, rama `BCM_INIT`: `initCallback(data)` invocaba el callback del
-usuario con `data` tipado `Map<dynamic, dynamic>?`, tal cual venía de `call.arguments[...]` — sin
-ningún cast. La firma pública documentada (`BackgroundLocator.registerLocationUpdate({void
-Function(Map<String, dynamic>)? initCallback, ...})`) promete `Map<String, dynamic>`. En runtime,
-`StandardMethodCodec` decodifica los `Map` del canal como `Map<Object?, Object?>` — **no** es un
-subtipo de `Map<String, dynamic>`, así que cualquier `initCallback` declarado siguiendo la firma
-pública tal cual reventaba con:
-
-```
-type '_Map<Object?, Object?>' is not a subtype of type 'Map<String, dynamic>' of 'data'
-```
-
-sin ningún log — el `TypeError` ocurre dentro del handler de `setMethodCallHandler`, en un `Future`
-que nadie espera ni captura, así que el callback del usuario simplemente nunca corría, en
-silencio. `example/lib/location_callback_handler.dart` no lo mostraba porque declara su
-`initCallback` con el tipo más laxo `Map<dynamic, dynamic>` en vez del tipo público documentado —
-tapaba el bug por accidente, no lo evitaba a propósito.
-
-**Encontrado escribiendo `test/callback_dispatcher_test.dart`** (ver `docs/testing.md`) — el mismo
-patrón de "un test nuevo revela un bug real" que ya pasó con el fix de plugins no registrados.
-
-**Resuelto**: `callback_dispatcher.dart` ahora castea explícitamente antes de invocar
-(`Map<String, dynamic>.from(args[Keys.ARG_INIT_DATA_CALLBACK] as Map? ?? {})`), garantizando el
-tipo que la firma pública promete, sin importar si el consumidor declaró su `initCallback` con el
-tipo estricto o el laxo (`Map<String, dynamic>` sigue siendo válido para un parámetro
-`Map<dynamic, dynamic>`, así que no rompe a `example/`).
 
 ## Optimizaciones aplicadas (rama `major-update`)
 
@@ -154,16 +135,9 @@ no con un workaround — `example/` ahora compila, instala y corre en un disposi
 4. **`android:exported`** — `targetSdk 34` exige un valor explícito en cualquier componente con
    `<intent-filter>`; se agregó `android:exported="true"` a `MainActivity` y `android:exported=
    "false"` al `BootBroadcastReceiver` (no debe poder dispararlo otra app).
-5. **`FOREGROUND_SERVICE_LOCATION` faltante** — con `targetSdk 34`, `IsolateHolderService.onCreate()`
-   revienta con `SecurityException` al llamar `startForeground()` si el manifest no declara este
-   permiso (además de `ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION`, que ya estaban). No es
-   específico de `example/` — **cualquier app consumidora con `targetSdk >= 34` necesita este
-   permiso en su manifest** para que el foreground service arranque. Confirmado con el crash real
-   en `adb logcat`:
-   ```
-   SecurityException: Starting FGS with type location ... requires permissions: all of the
-   permissions allOf=true [android.permission.FOREGROUND_SERVICE_LOCATION] ...
-   ```
+5. **`FOREGROUND_SERVICE_LOCATION` faltante** — no específico de `example/`, ver ítem 4 de
+   "Ya documentados en README.md" arriba. Es lo que confirmó, con un crash real en `adb logcat`,
+   que cualquier app consumidora con `targetSdk >= 34` necesita este permiso.
 
 Verificado end-to-end en un dispositivo real: `flutter build apk --release` en `example/`,
 instalado, permisos de ubicación otorgados, botón "Start" tocado — el foreground service arranca,

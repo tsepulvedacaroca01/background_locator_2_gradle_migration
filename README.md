@@ -71,6 +71,44 @@ await BackgroundLocator.initialize();
 await BackgroundLocator.registerLocationUpdate(yourCallback, ...);
 ```
 
+### `FOREGROUND_SERVICE_LOCATION` required on Android 14+ (`targetSdk >= 34`)
+
+Starting with Android 14, a foreground service declared with `foregroundServiceType="location"`
+(this plugin's `IsolateHolderService`) needs the caller app to declare
+`android.permission.FOREGROUND_SERVICE_LOCATION` in its manifest, in addition to
+`ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION`. Without it, `IsolateHolderService.onCreate()`
+crashes as soon as `registerLocationUpdate()` is called — even with the location permissions
+already granted at runtime:
+
+```
+SecurityException: Starting FGS with type location ... requires permissions: all of the
+permissions allOf=true [android.permission.FOREGROUND_SERVICE_LOCATION] any of the permissions
+allOf=false [android.permission.ACCESS_COARSE_LOCATION, android.permission.ACCESS_FINE_LOCATION]
+```
+
+Add this to your app's `AndroidManifest.xml`:
+
+```xml
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+```
+
+### Gson/R8 crash fixed automatically for consumers that minify (Android)
+
+Older versions of this fork required consumers building with R8/ProGuard enabled to copy a set of
+Gson `TypeToken` keep rules into their own `android/app/proguard-rules.pro`, or hit a runtime
+crash (`RuntimeException: Missing type parameter.`) as soon as the background service started.
+This fork now ships `android/consumer-rules.pro`, applied automatically to any consumer via
+Gradle's `consumerProguardFiles` — no manual ProGuard setup needed anymore. If your app already had
+this workaround copied by hand, it's now redundant and safe to remove.
+
+### `initCallback` fix — was silently never firing
+
+`registerLocationUpdate(..., initCallback: ...)` declared its parameter as `Map<String, dynamic>`,
+but the actual value handed to it at runtime was whatever `StandardMethodCodec` decodes a platform
+channel `Map` into (`Map<Object?, Object?>`) — not assignable to `Map<String, dynamic>`, so the
+callback threw a `TypeError` inside an unawaited `Future` and silently never ran. Fixed — callers
+using `initCallback` with the documented `Map<String, dynamic>` signature now receive it correctly.
+
 ## Usage with this fork
 
 To use this fork in your Flutter project, add the following to your `pubspec.yaml`:

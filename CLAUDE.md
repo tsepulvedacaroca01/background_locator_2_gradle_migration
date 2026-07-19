@@ -98,9 +98,13 @@ App Dart (consumidor)
   exactamente este bug (`Map<String, dynamic>` documentado, `Map<Object?, Object?>` real → `TypeError`
   silencioso, ver `docs/known-issues.md` § `BCM_INIT`). Si agregás un callback nuevo con un `Map`
   tipado como argumento, casteá con `.cast<K, V>()`/`Map<K, V>.from(...)` antes de invocarlo.
-- Cambios de compatibilidad de build (AGP/Gradle/Kotlin) van documentados en el `README.md`
-  público (§ "AGP 9 / Gradle 9 compatibility") — es lo primero que lee cualquiera que forkee este
-  fork y vea el mismo error. No dupliques ese texto en `docs/`, solo referencialo.
+- **Cualquier gotcha que le importe a un consumidor** (no solo a quien mantiene este repo) va
+  documentado en el `README.md` público, en inglés, mismo formato que las secciones existentes
+  (qué se rompe, el error/stack trace exacto, cómo se arregla) — compatibilidad de build
+  (AGP/Gradle/Kotlin), permisos de manifest requeridos, crashes en runtime, bugs de la API pública.
+  Es lo primero que lee cualquiera que consuma este fork y vea el mismo error. `docs/known-issues.md`
+  indexa esos ítems sin duplicar el texto (ver su cabecera) y agrega el detalle de diagnóstico
+  interno (línea exacta, cómo se encontró, cómo se verificó) que no le sirve a un consumidor.
 
 ## Comandos frecuentes
 
@@ -132,8 +136,9 @@ cd example && flutter run
 - `docs/ios.md` — headless `FlutterEngine`, `registerPlugins` callback, region monitoring,
   relanzamiento tras kill
 - `docs/dart-api.md` — API pública Dart, settings, `LocationDto`, sincronización de claves
-- `docs/known-issues.md` — gotchas de este fork, con un crash real confirmado en producción (Gson
-  `TypeToken` + R8) y su fix documentado
+- `docs/known-issues.md` — gotchas de este fork con crash real confirmado (Gson `TypeToken` + R8,
+  `FOREGROUND_SERVICE_LOCATION`, `initCallback`/`BCM_INIT`), optimizaciones aplicadas, y el detalle
+  de la modernización de `example/`
 - `docs/style.md` — estilo de código Dart: blancos alrededor de control flow, trailing commas,
   doc comments, idioma (inglés en API pública vs español en docs internos), orden de imports
 - `docs/testing.md` — qué se testea acá (unit + API pública contra `MethodChannel` mockeado +
