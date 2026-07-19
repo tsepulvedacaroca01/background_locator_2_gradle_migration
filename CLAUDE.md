@@ -45,8 +45,10 @@ que `Platform.isAndroid` es `true` en el host de test va a fallar o mentir.
 - **iOS**: Objective-C, deployment target 8.0. Sin dependencias nativas propias más allá de
   `Flutter`/`CoreLocation`.
 - Tests Dart en `test/` (mirror de `lib/`) — cubren la API pública (`BackgroundLocator` contra un
-  `MethodChannel` mockeado) y la lógica pura (`LocationDto`, `AndroidSettings`/`IOSSettings`,
-  `SettingsUtil`). No hay tests nativos (Kotlin/Obj-C) ni CI configurado en este repo.
+  `MethodChannel` mockeado), el dispatcher de background (`callbackDispatcher` contra una llamada
+  entrante simulada — incluye el click de notificación) y la lógica pura (`LocationDto`,
+  `AndroidSettings`/`IOSSettings`, `SettingsUtil`). No hay tests nativos (Kotlin/Obj-C) ni CI
+  configurado en este repo.
 
 ## Arquitectura (resumen — ver docs/architecture.md para el detalle)
 
@@ -83,6 +85,19 @@ App Dart (consumidor)
   `.edit()....apply()` (hasta 11 escrituras a disco separadas por cada `registerLocationUpdate()`);
   ahora arma un solo `editor` y aplica una vez. Si agregás una clave nueva a ese método, sumala al
   mismo `editor` encadenado, no un `.edit()` aparte.
+- **No reasignes/recrees objetos ni repitas llamadas idempotentes en el hot path de
+  `IsolateHolderService`** (`onLocationUpdated`/`sendLocationEvent` — corre potencialmente cada
+  pocos segundos durante horas). Ya se sacaron dos casos reales: un `MethodChannel` nuevo por cada
+  ubicación (ahora reusa el campo `backgroundChannel`, seteado una sola vez) y una llamada repetida
+  a `ensureInitializationComplete()` que `FlutterEngine(context)` ya garantiza en
+  `startLocatorService()`. Cualquier trabajo que solo necesite correr "una vez que el servicio
+  arranca" va en `startLocatorService()`/`onCreate()`, no en el callback de cada ubicación.
+- **`callback_dispatcher.dart`: castear explícito antes de invocar un callback tipado del
+  usuario** — los `Map` que llegan por el canal se decodifican como `Map<Object?, Object?>`
+  (`StandardMethodCodec`), no como el tipo que la firma pública promete. `initCallback` tenía
+  exactamente este bug (`Map<String, dynamic>` documentado, `Map<Object?, Object?>` real → `TypeError`
+  silencioso, ver `docs/known-issues.md` § `BCM_INIT`). Si agregás un callback nuevo con un `Map`
+  tipado como argumento, casteá con `.cast<K, V>()`/`Map<K, V>.from(...)` antes de invocarlo.
 - Cambios de compatibilidad de build (AGP/Gradle/Kotlin) van documentados en el `README.md`
   público (§ "AGP 9 / Gradle 9 compatibility") — es lo primero que lee cualquiera que forkee este
   fork y vea el mismo error. No dupliques ese texto en `docs/`, solo referencialo.
@@ -121,5 +136,6 @@ cd example && flutter run
   `TypeToken` + R8) y su fix documentado
 - `docs/style.md` — estilo de código Dart: blancos alrededor de control flow, trailing commas,
   doc comments, idioma (inglés en API pública vs español en docs internos), orden de imports
-- `docs/testing.md` — qué se testea acá (unit + API pública contra `MethodChannel` mockeado),
-  estructura de `test/`, y la limitación real de `Platform.isAndroid`/`isIOS` en el host de test
+- `docs/testing.md` — qué se testea acá (unit + API pública contra `MethodChannel` mockeado +
+  dispatcher de background contra llamada entrante simulada), estructura de `test/`, y la
+  limitación real de `Platform.isAndroid`/`isIOS` en el host de test

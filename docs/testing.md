@@ -7,15 +7,21 @@ aplica acá. Lo que sí hay es una API pública Dart delgada (`lib/`) que arma `
 
 ---
 
-## Qué se testea acá — dos niveles, no más
+## Qué se testea acá — tres niveles, no más
 
 1. **Unit** — funciones/mapeos puros, sin `MethodChannel`, sin bindings. `LocationDto.fromJson`/
    `toJson`, `LocationAccuracy`, `AndroidSettings.toMap()`/`IOSSettings.toMap()`,
    `SettingsUtil.getArgumentsMap()`.
-2. **API pública contra el canal mockeado** — `BackgroundLocator` (`lib/background_locator.dart`)
-   invocado de verdad, verificando el `method` y los `arguments` exactos que le llegarían al lado
-   nativo, sin ese lado nativo real (se mockea el `MethodChannel` con
-   `TestDefaultBinaryMessengerBinding`).
+2. **API pública contra el canal mockeado (Dart → nativo)** — `BackgroundLocator`
+   (`lib/background_locator.dart`) invocado de verdad, verificando el `method` y los `arguments`
+   exactos que le llegarían al lado nativo, sin ese lado nativo real (se mockea el `MethodChannel`
+   con `TestDefaultBinaryMessengerBinding`).
+3. **Dispatcher de background contra una llamada entrante simulada (nativo → Dart)** —
+   `callbackDispatcher()` (`lib/callback_dispatcher.dart`) invocado de verdad, simulando el
+   `MethodCall` que el lado nativo mandaría (`BCM_SEND_LOCATION`, `BCM_NOTIFICATION_CLICK`,
+   `BCM_INIT`, `BCM_DISPOSE`) y verificando que el callback real del usuario se ejecute con los
+   datos correctos — incluye la única garantía real de que "tocar la notificación" o "el pluggable
+   de init" hacen algo.
 
 **No hay tests nativos** (Kotlin/Obj-C) en este repo — no hay harness de test configurado
 (Robolectric/JUnit del lado Android, XCTest del lado iOS). El comportamiento nativo (arranque del
@@ -34,6 +40,7 @@ Espeja `lib/` — mismo path relativo, sufijo `_test.dart`:
 ```
 test/
 ├── background_locator_test.dart        # lib/background_locator.dart
+├── callback_dispatcher_test.dart       # lib/callback_dispatcher.dart
 ├── location_dto_test.dart              # lib/location_dto.dart
 ├── settings/
 │   ├── android_settings_test.dart      # lib/settings/android_settings.dart
@@ -152,12 +159,75 @@ técnica del test en sí, sino porque es la única forma válida de pasarle algo
 
 ---
 
+## 3. Tests del dispatcher de background — simular una llamada entrante
+
+`callbackDispatcher()` registra su propio `setMethodCallHandler` en el canal background
+(`Keys.BACKGROUND_CHANNEL_ID`) — para testearlo de verdad hay que simular una llamada *entrante*
+(nativo → Dart), lo opuesto del patrón de la sección 2 (`invokeMethod`, Dart → nativo). Se hace con
+`TestDefaultBinaryMessengerBinding...handlePlatformMessage`, codificando el `MethodCall` a mano con
+el codec del canal:
+
+```dart
+// test/callback_dispatcher_test.dart
+bool _notificationCallbackCalled = false;
+
+@pragma('vm:entry-point')
+void _notificationCallback() {
+  _notificationCallbackCalled = true;
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  const backgroundChannel = MethodChannel(Keys.BACKGROUND_CHANNEL_ID);
+  final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+
+  // callbackDispatcher() termina con _backgroundChannel.invokeMethod(METHOD_SERVICE_INITIALIZED)
+  // — sin este mock esa llamada saliente queda sin resolver (no rompe los asserts, ensucia el log).
+  messenger.setMockMethodCallHandler(backgroundChannel, (call) async => null);
+
+  Future<void> simulateNativeCall(String method, Map<Object?, Object?> arguments) async {
+    final data = backgroundChannel.codec.encodeMethodCall(MethodCall(method, arguments));
+    await messenger.handlePlatformMessage(Keys.BACKGROUND_CHANNEL_ID, data, (_) {});
+  }
+
+  setUp(() {
+    _notificationCallbackCalled = false;
+    callbackDispatcher(); // registra el handler de nuevo en cada test
+  });
+
+  test('BCM_NOTIFICATION_CLICK invoca el callback registrado al tocar la notificación', () async {
+    final handle = PluginUtilities.getCallbackHandle(_notificationCallback)!.toRawHandle();
+
+    await simulateNativeCall(Keys.BCM_NOTIFICATION_CLICK, {
+      Keys.ARG_NOTIFICATION_CALLBACK: handle,
+    });
+
+    expect(_notificationCallbackCalled, isTrue);
+  });
+}
+```
+
+**Qué NO verifica esto**: el toque físico de la notificación en sí lo maneja
+`BackgroundLocatorPlugin.onNewIntent()` del lado Android (no testeable acá, requiere Robolectric).
+Lo que sí verifica, y es la parte que vive en este repo Dart: que una vez que el nativo manda
+`BCM_NOTIFICATION_CLICK` con el handle correcto, el callback del usuario efectivamente se ejecuta
+con el dato correcto — la mitad de la garantía que sí es responsabilidad de este código.
+
+**Este test encontró un bug real** (ver `docs/known-issues.md` § `BCM_INIT`): `initCallback`
+recibía un `Map<Object?, Object?>` sin castear, incompatible con el tipo público documentado
+(`Map<String, dynamic>`) — `TypeError` silencioso, el callback nunca corría. El bug no era visible
+armando la llamada a mano y assertenado "no explota" — hizo falta capturar el valor recibido
+(`_receivedInitData`) y compararlo con `expect(..., {'countInit': 1})` para que apareciera. Mismo
+criterio que la sección 1: verificar el valor exacto, no solo "no tira excepción".
+
+---
+
 ## Cómo correr
 
 ```sh
-# Primera vez / tras tocar pubspec.yaml — SIEMPRE con --no-example
-# (ver docs/known-issues.md, example/ no resuelve en un SDK Dart moderno)
-flutter pub get --no-example
+# Primera vez / tras tocar pubspec.yaml
+flutter pub get
 
 # Toda la suite
 flutter test

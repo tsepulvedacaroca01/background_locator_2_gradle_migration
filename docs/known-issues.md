@@ -74,6 +74,35 @@ ahora loguean con `Log.e`, mismo criterio que `registerAppPlugins` (`docs/androi
 Si en el futuro se agrega un `catch` nuevo en código nativo de este repo, seguir el mismo patrón
 — nunca un `catch` mudo (ver `CLAUDE.md` § Convenciones).
 
+## `BCM_INIT` — `initCallback` nunca recibía un `Map<String, dynamic>` real (resuelto)
+
+`lib/callback_dispatcher.dart`, rama `BCM_INIT`: `initCallback(data)` invocaba el callback del
+usuario con `data` tipado `Map<dynamic, dynamic>?`, tal cual venía de `call.arguments[...]` — sin
+ningún cast. La firma pública documentada (`BackgroundLocator.registerLocationUpdate({void
+Function(Map<String, dynamic>)? initCallback, ...})`) promete `Map<String, dynamic>`. En runtime,
+`StandardMethodCodec` decodifica los `Map` del canal como `Map<Object?, Object?>` — **no** es un
+subtipo de `Map<String, dynamic>`, así que cualquier `initCallback` declarado siguiendo la firma
+pública tal cual reventaba con:
+
+```
+type '_Map<Object?, Object?>' is not a subtype of type 'Map<String, dynamic>' of 'data'
+```
+
+sin ningún log — el `TypeError` ocurre dentro del handler de `setMethodCallHandler`, en un `Future`
+que nadie espera ni captura, así que el callback del usuario simplemente nunca corría, en
+silencio. `example/lib/location_callback_handler.dart` no lo mostraba porque declara su
+`initCallback` con el tipo más laxo `Map<dynamic, dynamic>` en vez del tipo público documentado —
+tapaba el bug por accidente, no lo evitaba a propósito.
+
+**Encontrado escribiendo `test/callback_dispatcher_test.dart`** (ver `docs/testing.md`) — el mismo
+patrón de "un test nuevo revela un bug real" que ya pasó con el fix de plugins no registrados.
+
+**Resuelto**: `callback_dispatcher.dart` ahora castea explícitamente antes de invocar
+(`Map<String, dynamic>.from(args[Keys.ARG_INIT_DATA_CALLBACK] as Map? ?? {})`), garantizando el
+tipo que la firma pública promete, sin importar si el consumidor declaró su `initCallback` con el
+tipo estricto o el laxo (`Map<String, dynamic>` sigue siendo válido para un parámetro
+`Map<dynamic, dynamic>`, así que no rompe a `example/`).
+
 ## Optimizaciones aplicadas (rama `major-update`)
 
 - **`PreferencesManager.saveSettings()` — 18 `.apply()` a 1**: guardaba cada clave del `Map` de
@@ -90,6 +119,17 @@ Si en el futuro se agrega un `catch` nuevo en código nativo de este repo, segui
   `adb logcat`) de `example/` — el flujo completo (foreground service, `FlutterEngine` secundario,
   `InitPluggable` con Gson bajo R8, callback de ubicación) sigue funcionando igual con las
   versiones nuevas.
+- **`IsolateHolderService.sendLocationEvent()` reusa el `MethodChannel` cacheado** en vez de crear
+  uno nuevo en cada actualización de ubicación — este método corre en el hot path del servicio
+  (potencialmente cada pocos segundos, durante horas). El campo `backgroundChannel` ya existía
+  (seteado una sola vez en `startLocatorService()`), pero `sendLocationEvent()` no lo reusaba.
+- **`onLocationUpdated()` ya no llama `FlutterInjector...ensureInitializationComplete()`** en cada
+  ubicación — `FlutterEngine(context)` (creado una sola vez en `startLocatorService()`) ya garantiza
+  la inicialización del loader antes de que pueda dispararse cualquier actualización (ver el
+  javadoc de `FlutterEngine`: "The first FlutterEngine instance constructed per process will also
+  load the Flutter native library and start a Dart VM"). La llamada repetida era de bajo costo
+  (`ensureInitializationComplete` hace `if (initialized) return` como primera línea) pero
+  igualmente redundante en un método que corre potencialmente cientos de veces por sesión.
 
 ## `example/` — modernizado (antes no resolvía en un SDK Dart/AGP moderno)
 

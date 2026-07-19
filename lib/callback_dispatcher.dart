@@ -34,7 +34,13 @@ void callbackDispatcher() {
       final Map<dynamic, dynamic> args = call.arguments;
       final Function? initCallback = PluginUtilities.getCallbackFromHandle(
           CallbackHandle.fromRawHandle(args[Keys.ARG_INIT_CALLBACK]));
-      Map<dynamic, dynamic>? data = args[Keys.ARG_INIT_DATA_CALLBACK];
+      // StandardMethodCodec decodifica los Map del canal como
+      // Map<Object?, Object?> — initCallback (BackgroundLocator.registerLocationUpdate)
+      // espera Map<String, dynamic>. Sin este cast, initCallback(data) tira
+      // TypeError en runtime ("not a subtype of Map<String, dynamic>") y el
+      // callback del usuario nunca corre.
+      final Map<String, dynamic> data = Map<String, dynamic>.from(
+          args[Keys.ARG_INIT_DATA_CALLBACK] as Map? ?? {});
       if (initCallback != null) {
         initCallback(data);
       }

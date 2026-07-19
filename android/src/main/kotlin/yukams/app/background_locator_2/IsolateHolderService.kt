@@ -11,7 +11,6 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import android.content.pm.PackageManager
-import io.flutter.FlutterInjector
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
@@ -295,11 +294,14 @@ class IsolateHolderService : MethodChannel.MethodCallHandler, LocationUpdateList
 
     override fun onLocationUpdated(location: HashMap<Any, Any>?) {
         try {
-            context?.let {
-                FlutterInjector.instance().flutterLoader().ensureInitializationComplete(
-                    it, null
-                )
-            }
+            // No hace falta ensureInitializationComplete() acá — FlutterEngine(context) en
+            // startLocatorService() ya lo garantiza antes de que pueda dispararse cualquier
+            // actualización de ubicación (ver el javadoc de FlutterEngine: "The first
+            // FlutterEngine instance constructed per process will also load the Flutter
+            // native library and start a Dart VM"). Repetir la llamada acá — en el hot path,
+            // potencialmente cada pocos segundos durante horas — era una llamada redundante
+            // (aunque de bajo costo: ensureInitializationComplete ya hace un early-return si
+            // `initialized` es true).
 
             //https://github.com/flutter/plugins/pull/1641
             //https://github.com/flutter/flutter/issues/36059
@@ -333,13 +335,12 @@ class IsolateHolderService : MethodChannel.MethodCallHandler, LocationUpdateList
         //https://github.com/flutter/plugins/pull/1641/commits/4358fbba3327f1fa75bc40df503ca5341fdbb77d
         // new version of flutter can not invoke method from background thread
 
+        // Reusa el campo `backgroundChannel` (seteado una sola vez en
+        // startLocatorService()) en vez de crear un MethodChannel nuevo en cada
+        // actualización de ubicación — este método corre potencialmente cada pocos
+        // segundos durante horas, esa asignación era pura carga evitable.
         if (backgroundEngine != null) {
             context?.let {
-                val backgroundChannel =
-                    MethodChannel(
-                        getBinaryMessenger(it)!!,
-                        Keys.BACKGROUND_CHANNEL_ID
-                    )
                 Handler(it.mainLooper)
                     .post {
                         Log.d("plugin", "sendLocationEvent $result")
