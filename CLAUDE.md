@@ -37,9 +37,11 @@ que `Platform.isAndroid` es `true` en el host de test va a fallar o mentir.
 - **Dart**: API pública del plugin (`lib/`), sin lógica de negocio — solo arma/parsea los `Map`
   que cruzan el `MethodChannel` y resuelve `CallbackHandle`s.
 - **Android**: Kotlin, `minSdk 21`, `compileSdk 36`, JVM target 17. Dependencias nativas propias:
-  `play-services-location:21.0.1`, `gson:2.8.6`. `android/consumer-rules.pro` (heredado por
+  `play-services-location:21.4.0`, `gson:2.14.0`. `android/consumer-rules.pro` (heredado por
   cualquier consumidor vía `consumerProguardFiles`) mantiene R8 funcionando con el `TypeToken` de
-  Gson que usa `PreferencesManager` — ver `docs/known-issues.md`.
+  Gson que usa `PreferencesManager` — ver `docs/known-issues.md`. Con `targetSdk >= 34`, el
+  consumidor también necesita declarar `FOREGROUND_SERVICE_LOCATION` en su manifest — ver
+  `docs/android.md`.
 - **iOS**: Objective-C, deployment target 8.0. Sin dependencias nativas propias más allá de
   `Flutter`/`CoreLocation`.
 - Tests Dart en `test/` (mirror de `lib/`) — cubren la API pública (`BackgroundLocator` contra un
@@ -88,11 +90,10 @@ App Dart (consumidor)
 ## Comandos frecuentes
 
 ```sh
-# Instalar dependencias — SIEMPRE con --no-example (ver docs/known-issues.md, example/ no
-# resuelve en un SDK Dart moderno):
-flutter pub get --no-example
+# Instalar dependencias (incluye example/)
+flutter pub get
 
-# Correr los tests (requiere el pub get de arriba primero)
+# Correr los tests del plugin (requiere el pub get de arriba primero)
 flutter test
 
 # Formatear antes de commitear (ver docs/style.md § 2)
@@ -103,9 +104,9 @@ dart format lib/ test/
 # de esa app:
 flutter pub upgrade background_locator_2   # trae el último commit de `master`
 
-# Ver el ejemplo de uso "canónico" del API completo (init/dispose/notificationTapCallback) —
-# example/lib/main.dart, example/lib/location_callback_handler.dart. No intentes `cd example &&
-# flutter run` sin migrar antes location_permissions (ver docs/known-issues.md).
+# Correr el example de verdad (demo del API completo: init/dispose/notificationTapCallback —
+# example/lib/main.dart, example/lib/location_callback_handler.dart)
+cd example && flutter run
 ```
 
 ## Docs de referencia

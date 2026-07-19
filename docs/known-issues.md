@@ -85,31 +85,53 @@ Si en el futuro se agrega un `catch` nuevo en código nativo de este repo, segui
   (`android/build.gradle`) — sin ningún uso real en `android/src/` (verificado con `grep`). Es una
   dependencia de UI que un plugin sin UI propia (todo el trabajo pasa por `MethodChannel` y un
   foreground service) no debería arrastrar al build de cada consumidor.
+- **`gson` 2.8.6 → 2.14.0, `play-services-location` 21.0.1 → 21.4.0** (`android/build.gradle`).
+  Verificado con un build real (`flutter build apk --release` + instalación en dispositivo +
+  `adb logcat`) de `example/` — el flujo completo (foreground service, `FlutterEngine` secundario,
+  `InitPluggable` con Gson bajo R8, callback de ubicación) sigue funcionando igual con las
+  versiones nuevas.
 
-## `example/` no resuelve en un SDK Dart moderno — usar `--no-example`
+## `example/` — modernizado (antes no resolvía en un SDK Dart/AGP moderno)
 
-`flutter pub get`/`flutter test` en la raíz de este repo intentan resolver también las
-dependencias de `example/` (comportamiento estándar de Flutter para packages de tipo plugin, para
-que `cd example && flutter run` funcione solo). Eso falla en cualquier SDK Dart actual (probado
-con 3.12.2) por dos motivos apilados en `example/pubspec.yaml`:
+Antes, `flutter pub get`/`flutter test` en la raíz fallaban al intentar resolver también
+`example/` (comportamiento estándar de Flutter para packages de tipo plugin). Se corrigió de raíz,
+no con un workaround — `example/` ahora compila, instala y corre en un dispositivo real:
 
-1. `environment.sdk: ">=2.8.0 <3.0.0"` — el lower bound (2.8.0) es anterior a null safety
-   (mínimo 2.12.0); Dart 3.x ya no tiene modo legacy, así que rechaza la resolución directo.
-2. Aunque se suba ese lower bound a 2.12.0, `location_permissions: ^3.0.0+1` (dependencia del
-   example) tampoco soporta null safety en ninguna versión `<4.0.0` — haría falta migrar el
-   example completo a `permission_handler` (como ya usa `docs/android.md`/`docs/ios.md` del lado
-   nativo) para que compile en un SDK moderno. No se hizo — está fuera del alcance de mantener la
-   librería en sí, el `example/` es solo referencia de uso del API.
+1. **`example/pubspec.yaml`** — `environment.sdk` bajo `2.12.0` (pre-null-safety, Dart 3.x ya no
+   tiene modo legacy) y `location_permissions` (sin soporte null-safety en ninguna versión) fueron
+   la causa. Se subió el `sdk` a `">=2.17.0 <4.0.0"` y se migró a `permission_handler` (misma
+   librería que ya recomiendan `docs/android.md`/`docs/ios.md`).
+2. **`example/lib/*.dart`** — el código entero predataba null safety (`bool isRunning;` sin `?`,
+   `SendPort` no-nullable asignado desde un `lookupPortByName()` que devuelve `SendPort?`, `pow()`
+   devolviendo `num` asignado a `double`). Migrado campo por campo, sin cambiar la lógica.
+3. **`example/android/`** — Gradle 7.6/AGP 4.1.3/Kotlin 1.7.20 con `buildscript{jcenter()}` legacy,
+   incompatible con cualquier JDK moderno (`Unsupported class file major version`). Modernizado
+   replicando el mismo patrón de `settings.gradle`/`build.gradle`/`app/build.gradle` ya probado en
+   una app consumidora real (Gradle 9.1.0, AGP 9.0.1, Kotlin 2.3.20, `namespace`, `compileSdk 36`,
+   `targetSdk 34`). De paso se borró `Application.kt` — una clase 100% comentada con imports rotos
+   de la API v1 de Flutter (`PluginRegistrantCallback`, `FlutterMain`), sin ninguna referencia real
+   en el manifest (que usa `${applicationName}`, el default de Flutter).
+4. **`android:exported`** — `targetSdk 34` exige un valor explícito en cualquier componente con
+   `<intent-filter>`; se agregó `android:exported="true"` a `MainActivity` y `android:exported=
+   "false"` al `BootBroadcastReceiver` (no debe poder dispararlo otra app).
+5. **`FOREGROUND_SERVICE_LOCATION` faltante** — con `targetSdk 34`, `IsolateHolderService.onCreate()`
+   revienta con `SecurityException` al llamar `startForeground()` si el manifest no declara este
+   permiso (además de `ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION`, que ya estaban). No es
+   específico de `example/` — **cualquier app consumidora con `targetSdk >= 34` necesita este
+   permiso en su manifest** para que el foreground service arranque. Confirmado con el crash real
+   en `adb logcat`:
+   ```
+   SecurityException: Starting FGS with type location ... requires permissions: all of the
+   permissions allOf=true [android.permission.FOREGROUND_SERVICE_LOCATION] ...
+   ```
 
-**Workaround, no fix** — correr todo con `--no-example`:
+Verificado end-to-end en un dispositivo real: `flutter build apk --release` en `example/`,
+instalado, permisos de ubicación otorgados, botón "Start" tocado — el foreground service arranca,
+el `FlutterEngine` secundario registra los plugins de la app y ejecuta el callback, y llegan
+ubicaciones reales al callback del usuario. Sin `FATAL EXCEPTION` en logcat.
 
-```sh
-flutter pub get --no-example
-flutter test
-```
-
-`flutter test` reusa la resolución ya hecha por ese `pub get` y no vuelve a intentar tocar
-`example/` mientras `pubspec.lock`/`.dart_tool/package_config.json` del root sigan al día.
+`flutter pub get --no-example` sigue funcionando por compatibilidad, pero ya no es necesario —
+`flutter pub get`/`flutter test` resuelven todo el repo sin flags especiales.
 
 ## Metadata del `pubspec.yaml` apunta a otro fork
 

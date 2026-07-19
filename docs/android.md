@@ -2,6 +2,20 @@
 
 Todo el código nativo vive en `android/src/main/kotlin/yukams/app/background_locator_2/`.
 
+## Permisos requeridos en el manifest del consumidor
+
+Además de `ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION`/`ACCESS_BACKGROUND_LOCATION`,
+`FOREGROUND_SERVICE` y `WAKE_LOCK`: con `targetSdk >= 34` (Android 14) también hace falta
+declarar `android.permission.FOREGROUND_SERVICE_LOCATION` — sin eso,
+`IsolateHolderService.onCreate()` revienta con `SecurityException` apenas llama a
+`startForeground()`, incluso con los permisos de ubicación en runtime ya otorgados. Confirmado con
+un crash real (`example/`, ver `docs/known-issues.md`):
+
+```
+SecurityException: Starting FGS with type location ... requires permissions: all of the
+permissions allOf=true [android.permission.FOREGROUND_SERVICE_LOCATION] ...
+```
+
 ## `IsolateHolderService` — el foreground service
 
 `IsolateHolderService.kt` es un `Service` normal (no `bindService`, `onBind` devuelve `null`) que
