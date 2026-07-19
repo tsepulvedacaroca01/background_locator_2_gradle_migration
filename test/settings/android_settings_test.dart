@@ -27,8 +27,10 @@ void main() {
       expect(map[Keys.SETTINGS_INTERVAL], 5);
       expect(map[Keys.SETTINGS_DISTANCE_FILTER], 0.0);
       expect(map[Keys.SETTINGS_ANDROID_WAKE_LOCK_TIME], 60);
-      expect(map[Keys.SETTINGS_ANDROID_LOCATION_CLIENT], LocationClient.google.index);
-      expect(map[Keys.SETTINGS_ANDROID_NOTIFICATION_CHANNEL_NAME], 'Location tracking');
+      expect(map[Keys.SETTINGS_ANDROID_LOCATION_CLIENT],
+          LocationClient.google.index);
+      expect(map[Keys.SETTINGS_ANDROID_NOTIFICATION_CHANNEL_NAME],
+          'Location tracking');
     });
 
     test('mapea valores custom, incluyendo LocationClient.android', () {
@@ -48,7 +50,8 @@ void main() {
       expect(map[Keys.SETTINGS_INTERVAL], 15);
       expect(map[Keys.SETTINGS_DISTANCE_FILTER], 10.0);
       expect(map[Keys.SETTINGS_ANDROID_WAKE_LOCK_TIME], 30);
-      expect(map[Keys.SETTINGS_ANDROID_LOCATION_CLIENT], LocationClient.android.index);
+      expect(map[Keys.SETTINGS_ANDROID_LOCATION_CLIENT],
+          LocationClient.android.index);
       expect(map[Keys.SETTINGS_ANDROID_NOTIFICATION_TITLE], 'Título custom');
     });
   });

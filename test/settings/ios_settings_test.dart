@@ -11,7 +11,8 @@ void main() {
 
       expect(map[Keys.SETTINGS_ACCURACY], LocationAccuracy.NAVIGATION.value);
       expect(map[Keys.SETTINGS_DISTANCE_FILTER], 0.0);
-      expect(map[Keys.SETTINGS_IOS_SHOWS_BACKGROUND_LOCATION_INDICATOR], isFalse);
+      expect(
+          map[Keys.SETTINGS_IOS_SHOWS_BACKGROUND_LOCATION_INDICATOR], isFalse);
       expect(map[Keys.SETTINGS_IOS_STOP_WITH_TERMINATE], isFalse);
     });
 
@@ -26,7 +27,8 @@ void main() {
 
       expect(map[Keys.SETTINGS_ACCURACY], LocationAccuracy.BALANCED.value);
       expect(map[Keys.SETTINGS_DISTANCE_FILTER], 25.0);
-      expect(map[Keys.SETTINGS_IOS_SHOWS_BACKGROUND_LOCATION_INDICATOR], isTrue);
+      expect(
+          map[Keys.SETTINGS_IOS_SHOWS_BACKGROUND_LOCATION_INDICATOR], isTrue);
       expect(map[Keys.SETTINGS_IOS_STOP_WITH_TERMINATE], isTrue);
     });
   });

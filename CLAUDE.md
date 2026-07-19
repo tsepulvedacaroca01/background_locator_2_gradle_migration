@@ -27,6 +27,11 @@ Si el cambio toca la API pública Dart (`lib/`) o agrega un argumento/setting nu
 canal, leer `docs/dart-api.md` § "Sincronización de claves" — es el error más fácil de cometer acá
 (un typo en una clave no rompe la compilación, rompe en runtime en silencio).
 
+Si el cambio agrega o modifica código en `lib/`, leer `docs/style.md` (formato, idioma, orden de
+imports) y `docs/testing.md` (dónde va el test, qué se puede testear de verdad en este repo y qué
+no) antes de escribir una línea — un test nuevo que no siga la estructura de `test/` o que asuma
+que `Platform.isAndroid` es `true` en el host de test va a fallar o mentir.
+
 ## Stack
 
 - **Dart**: API pública del plugin (`lib/`), sin lógica de negocio — solo arma/parsea los `Map`
@@ -83,6 +88,9 @@ flutter pub get --no-example
 # Correr los tests (requiere el pub get de arriba primero)
 flutter test
 
+# Formatear antes de commitear (ver docs/style.md § 2)
+dart format lib/ test/
+
 # Probar un cambio desde una app consumidora sin publicar: apuntar su pubspec.yaml a un path
 # local (path: ../background_locator_2_gradle_migration) o pushear a master y correr, del lado
 # de esa app:
@@ -103,3 +111,7 @@ flutter pub upgrade background_locator_2   # trae el último commit de `master`
 - `docs/dart-api.md` — API pública Dart, settings, `LocationDto`, sincronización de claves
 - `docs/known-issues.md` — gotchas de este fork, con un crash real confirmado en producción (Gson
   `TypeToken` + R8) y su fix documentado
+- `docs/style.md` — estilo de código Dart: blancos alrededor de control flow, trailing commas,
+  doc comments, idioma (inglés en API pública vs español en docs internos), orden de imports
+- `docs/testing.md` — qué se testea acá (unit + API pública contra `MethodChannel` mockeado),
+  estructura de `test/`, y la limitación real de `Platform.isAndroid`/`isIOS` en el host de test
