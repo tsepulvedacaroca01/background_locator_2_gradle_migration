@@ -147,6 +147,47 @@ ubicaciones reales al callback del usuario. Sin `FATAL EXCEPTION` en logcat.
 `flutter pub get --no-example` sigue funcionando por compatibilidad, pero ya no es necesario —
 `flutter pub get`/`flutter test` resuelven todo el repo sin flags especiales.
 
+## Investigado y descartado — warning "apply plugins that apply KGP" (Built-in Kotlin de AGP 9)
+
+Flutter 3.44+ tira este warning cuando un consumidor en AGP 9+ usa un plugin que aplica el Kotlin
+Gradle Plugin (KGP) él mismo — es el caso de `android/build.gradle` (`id
+'org.jetbrains.kotlin.android'`), que hoy sigue siendo necesario. Se investigó migrar a "Built-in
+Kotlin" (que AGP 9 puede proveer sin declarar el plugin) y **no se pudo hacer de forma segura
+todavía** — quedan tres intentos reales, los tres fallaron, probados contra una app consumidora
+real (`gms_flutter`, Flutter 3.44.4 / AGP 9.0.1):
+
+1. **No aplicar el plugin, sin ninguna otra condición** (`plugins { id 'com.android.library' }` +
+   bloque `kotlin { compilerOptions {...} }` a nivel de archivo, tal como indica la guía oficial de
+   migración) → `Could not find method kotlin() for arguments [...]`. La extensión `kotlin {}` no
+   existe sin aplicar el plugin — **Built-in Kotlin no está activo por default**, ni siquiera en
+   AGP 9: la plantilla actual de Flutter trae `android.builtInKotlin=false` en `gradle.properties`
+   del consumidor (confirmado en `gms_flutter/android/gradle.properties`).
+2. **Aplicar el plugin condicionalmente** (`apply plugin: 'kotlin-android'` fuera del bloque
+   `plugins {}`, ya que ese bloque no admite lógica condicional) solo cuando
+   `android.builtInKotlin` es `false` → compila, pero con referencias cruzadas rotas dentro del
+   propio módulo (`Unresolved reference 'startLocatorService'`, `'GoogleLocationProviderClient'`,
+   etc.) — mezclar el `plugins {}` declarativo (que resuelve la versión de Kotlin vía
+   `pluginManagement` del consumidor) con `apply plugin:` imperativo (mecanismo viejo, pensado para
+   resolver la versión desde un `buildscript {}` con classpath que este módulo ya no tiene desde la
+   migración a AGP 9) deja el compilador de Kotlin en un estado roto — no es solo una cuestión de
+   orden, es una resolución de plugin distinta e incompatible entre sí.
+3. **Prender `android.builtInKotlin=true` en el consumidor** (para validar que el módulo sin KGP sí
+   compila con esa flag) → **rompe el build entero**, ni siquiera llega a evaluar este módulo:
+   `IllegalStateException: The 'org.jetbrains.kotlin.android' plugin is no longer required for
+   Kotlin support since AGP 9.0`. Con esa flag activa, AGP directamente **prohíbe** que cualquier
+   módulo del build (no solo este) aplique el plugin de Kotlin clásico — y `mobile_scanner` (otro
+   plugin de `gms_flutter`, fuera de nuestro control) todavía lo aplica. La flag es global al
+   build, no por módulo, así que no hay forma de activarla "solo para nuestra librería".
+
+**Conclusión**: migrar a Built-in Kotlin requiere que **todos** los plugins de un consumidor lo
+hagan al mismo tiempo (uno solo que no migre bloquea la flag globalmente), y la migración condicional
+que sí preservaría compatibilidad hacia atrás no funciona en este Gradle/AGP tal como está armado
+hoy. `android/build.gradle` se dejó como estaba (aplicando `org.jetbrains.kotlin.android` en el
+bloque `plugins {}`) — es la única configuración de las cuatro probadas que compila. Revisar de
+nuevo cuando el ecosistema de plugins Flutter (`mobile_scanner` incluido) termine de migrar, o
+cuando Flutter/AGP maduren el soporte condicional — mientras tanto, el warning es correcto: "Future
+versions of Flutter will fail" es una advertencia a futuro, no una falla actual.
+
 ## Metadata del `pubspec.yaml` apunta a otro fork
 
 `homepage`/`repository` apuntan a `sultan18kh/background_locator_2_gradle_migration` e
