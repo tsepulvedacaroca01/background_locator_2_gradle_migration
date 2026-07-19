@@ -276,7 +276,7 @@ class IsolateHolderService : MethodChannel.MethodCallHandler, LocationUpdateList
 
             result.success(null)
         } catch (e: Exception) {
-
+            Log.e("IsolateHolderService", "onMethodCall failed for ${call.method}", e)
         }
     }
 
@@ -323,7 +323,7 @@ class IsolateHolderService : MethodChannel.MethodCallHandler, LocationUpdateList
                 sendLocationEvent(result)
             }
         } catch (e: Exception) {
-
+            Log.e("IsolateHolderService", "onLocationUpdated failed to dispatch $location", e)
         }
     }
 

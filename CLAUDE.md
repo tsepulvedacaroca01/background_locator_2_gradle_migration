@@ -37,7 +37,9 @@ que `Platform.isAndroid` es `true` en el host de test va a fallar o mentir.
 - **Dart**: API pública del plugin (`lib/`), sin lógica de negocio — solo arma/parsea los `Map`
   que cruzan el `MethodChannel` y resuelve `CallbackHandle`s.
 - **Android**: Kotlin, `minSdk 21`, `compileSdk 36`, JVM target 17. Dependencias nativas propias:
-  `play-services-location:21.0.1`, `gson:2.8.6`.
+  `play-services-location:21.0.1`, `gson:2.8.6`. `android/consumer-rules.pro` (heredado por
+  cualquier consumidor vía `consumerProguardFiles`) mantiene R8 funcionando con el `TypeToken` de
+  Gson que usa `PreferencesManager` — ver `docs/known-issues.md`.
 - **iOS**: Objective-C, deployment target 8.0. Sin dependencias nativas propias más allá de
   `Flutter`/`CoreLocation`.
 - Tests Dart en `test/` (mirror de `lib/`) — cubren la API pública (`BackgroundLocator` contra un
@@ -69,11 +71,16 @@ App Dart (consumidor)
 - Todo callback expuesto al usuario (`callback`, `initCallback`, `disposeCallback`,
   `notificationTapCallback`) tiene que ser top-level/static y `@pragma('vm:entry-point')` — se
   resuelven por `CallbackHandle`, no funcionan como closures.
-- El código nativo Android usa mucho `catch (e: Exception) { }` vacío heredado del código
-  original — **no repetir ese patrón en código nuevo**. Los dos bugs reales documentados en
-  `docs/known-issues.md` (plugins no registrados, `Missing type parameter`) costaron mucho más
-  tiempo de diagnosticar por falta de logging en el punto de falla real. Si agregás un `catch`,
-  logueá con `Log.e`/`NSLog` aunque sea en el caso "no debería pasar nunca".
+- **Nunca un `catch` mudo en código nativo nuevo** — logueá con `Log.e`/`NSLog` aunque sea en el
+  caso "no debería pasar nunca". Los bugs reales documentados en `docs/known-issues.md` (plugins no
+  registrados, `Missing type parameter`, y los dos `catch (e: Exception) { }` vacíos que había en
+  `IsolateHolderService.kt`) costaron mucho más tiempo de diagnosticar por falta de logging en el
+  punto de falla real — los tres ya están resueltos, no repitas el patrón en código nuevo.
+- **`SharedPreferences`: un solo `edit()`/`apply()` por operación lógica**, no uno por clave —
+  `PreferencesManager.saveSettings()` guardaba cada campo del `Map` de settings con su propio
+  `.edit()....apply()` (hasta 11 escrituras a disco separadas por cada `registerLocationUpdate()`);
+  ahora arma un solo `editor` y aplica una vez. Si agregás una clave nueva a ese método, sumala al
+  mismo `editor` encadenado, no un `.edit()` aparte.
 - Cambios de compatibilidad de build (AGP/Gradle/Kotlin) van documentados en el `README.md`
   público (§ "AGP 9 / Gradle 9 compatibility") — es lo primero que lee cualquiera que forkee este
   fork y vea el mismo error. No dupliques ese texto en `docs/`, solo referencialo.

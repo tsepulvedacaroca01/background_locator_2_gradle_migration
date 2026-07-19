@@ -1,6 +1,6 @@
 import 'dart:io' show Platform;
 
-import 'keys.dart';
+import 'package:background_locator_2/keys.dart';
 
 class LocationDto {
   final double latitude;

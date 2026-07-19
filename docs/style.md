@@ -26,11 +26,9 @@ if (Platform.isAndroid) {
 return args;
 ```
 
-**Estado: objetivo, no aplicado 100% retroactivamente.** Ejemplo real de la brecha
-(`_getCommonArgumentsMap`, mismo archivo): dos `if` hermanos consecutivos (no
-`if`/`else if`, dos sentencias independientes) sin línea en blanco entre ellos. No hace falta
-reformatear ese archivo solo por esto — aplicar la regla en código nuevo o cuando ya estés editando
-esas líneas por otro motivo.
+**Estado:** aplicado en todo `lib/` (rama `major-update`) — la única brecha real encontrada
+(`_getCommonArgumentsMap`, mismo archivo: dos `if` hermanos consecutivos sin línea en blanco entre
+ellos) se corrigió.
 
 ---
 
@@ -50,11 +48,12 @@ return LocationDto._(
 
 `dart format` la refuerza en la mayoría de los casos (correr `dart format lib/ test/` antes de
 commitear cualquier cambio), pero **no** es garantía absoluta: si una colección multilínea ya cabe
-en el ancho de columna sin la coma final, `dart format` la deja como está sin agregarla. Ejemplo
-real de esa brecha: `AndroidSettings.toMap()` (`lib/settings/android_settings.dart`), última
-entrada del `Map` (`Keys.SETTINGS_ANDROID_LOCATION_CLIENT: client.index`) sin coma final — `dart
-format` no la toca porque no cambia el resultado. Agregarla a mano si tocás ese literal por otro
-motivo; no vale la pena un commit solo por esto.
+en el ancho de columna sin la coma final, `dart format` la deja como está sin agregarla — no confiar
+en que "`dart format` no tocó nada" signifique "ya está bien", revisar a mano el último elemento de
+cualquier colección/llamada multilínea que edites.
+
+**Estado:** 0 violaciones — la única brecha real encontrada (`AndroidSettings.toMap()`, última
+entrada del `Map` sin coma final) se corrigió en la rama `major-update`.
 
 ---
 
@@ -115,24 +114,11 @@ commit, no hace falta cortar líneas a mano si `dart format` ya las dejó así.
 
 ---
 
-## 7. Orden de imports — objetivo, mezclado hoy incluso dentro de un mismo archivo
+## 7. Orden de imports
 
-**Esto es un objetivo a seguir en código nuevo, no una limpieza ya hecha.** El estado real hoy es
-inconsistente: algunos archivos importan sus propios módulos hermanos con ruta relativa
-(`import 'keys.dart';`), otros con `package:background_locator_2/...` absoluto, y al menos uno
-mezcla ambos estilos en el mismo archivo:
-
-```dart
-// lib/background_locator.dart — estado real, no el objetivo
-import 'package:background_locator_2/settings/android_settings.dart'; // absoluto
-import 'package:background_locator_2/settings/ios_settings.dart';     // absoluto
-...
-import 'auto_stop_handler.dart';   // relativo
-import 'callback_dispatcher.dart'; // relativo
-```
-
-Patrón objetivo para código nuevo (evita mezclar estilos dentro de un mismo archivo, sigue el
-lint `always_use_package_imports` de `package:lints`/`flutter_lints` aunque no esté forzado acá):
+Tres bloques separados por línea en blanco, cada uno alfabetizado por ruta completa, sin imports
+relativos para los propios módulos del paquete (sigue el lint `always_use_package_imports` de
+`package:lints`/`flutter_lints` aunque no esté forzado acá):
 
 ```dart
 import 'dart:async';                                        // 1. dart:* — alfabetizado
@@ -144,9 +130,10 @@ import 'package:background_locator_2/keys.dart';              // 3. package:back
 import 'package:background_locator_2/location_dto.dart';      //    alfabetizado por ruta completa
 ```
 
-Tres bloques separados por línea en blanco, cada uno alfabetizado por ruta completa, sin imports
-relativos para los propios módulos del paquete. No reordenar imports de un archivo que no estás
-tocando solo por esto.
+**Estado:** aplicado en toda `lib/` (rama `major-update`) — antes había imports relativos
+(`import 'keys.dart';`) mezclados con `package:background_locator_2/...` absoluto, incluso dentro
+de un mismo archivo (`lib/background_locator.dart`). No reordenar imports de un archivo que no
+estás tocando solo por esto si en algún momento se vuelve a desviar.
 
 ---
 

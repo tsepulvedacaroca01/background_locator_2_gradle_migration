@@ -3,8 +3,8 @@ import 'dart:ui';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import 'keys.dart';
-import 'location_dto.dart';
+import 'package:background_locator_2/keys.dart';
+import 'package:background_locator_2/location_dto.dart';
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {

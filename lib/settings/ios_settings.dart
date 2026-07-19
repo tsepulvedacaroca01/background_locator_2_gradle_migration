@@ -1,6 +1,5 @@
 import 'package:background_locator_2/keys.dart';
-
-import 'locator_settings.dart';
+import 'package:background_locator_2/settings/locator_settings.dart';
 
 class IOSSettings extends LocatorSettings {
   /// [accuracy] The accuracy of location, Default is max accuracy NAVIGATION.

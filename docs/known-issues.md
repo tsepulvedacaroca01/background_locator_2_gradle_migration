@@ -40,9 +40,11 @@ java.lang.RuntimeException: Missing type parameter.
 empezaba a trackear ubicación, y nunca en modo debug (R8 no corre en debug). Diagnosticado con
 `adb logcat` + reproducción en dispositivo real.
 
-Este módulo **no** ships un `consumer-rules.pro` — cualquier app que consuma este plugin con
-`minifyEnabled true` (o el equivalente por default de plantillas Flutter recientes) tiene que
-agregar las reglas de Gson a mano en su propio `android/app/proguard-rules.pro`:
+**Resuelto** (`android/consumer-rules.pro`, referenciado desde `android/build.gradle` vía
+`consumerProguardFiles`): cualquier app que consuma este plugin hereda estas reglas
+automáticamente, minifique o no, sin tener que redescubrir el crash. Verificado con un build real
+(`flutter build apk --release` de una app consumidora apuntando a este módulo por `path:`) — R8
+corre y el resultado sigue siendo un APK instalable.
 
 ```proguard
 -keepattributes Signature
@@ -52,28 +54,37 @@ agregar las reglas de Gson a mano en su propio `android/app/proguard-rules.pro`:
 -keep class yukams.app.background_locator_2.** { *; }
 ```
 
-**Pendiente real (no hecho todavía)**: agregar un `android/consumer-rules.pro` a este módulo con
-estas reglas y referenciarlo desde `android/build.gradle` (`consumerProguardFiles`) — así
-cualquier consumidor las hereda automáticamente en vez de tener que redescubrir este crash. Si se
-hace, el workaround manual que cualquier consumidor haya agregado en su propio
-`android/app/proguard-rules.pro` se puede simplificar (dejar solo el keep del paquete, o quitarlo
-del todo).
+Si una app consumidora ya tenía este mismo workaround copiado a mano en su propio
+`android/app/proguard-rules.pro` (necesario con versiones de este fork anteriores a este fix),
+ahora es redundante — se puede simplificar o quitar, `consumerProguardFiles` ya lo cubre.
 
-## `catch` silenciosos sin loguear (Android)
+## `catch` silenciosos sin loguear (Android) — resuelto
 
-Dos lugares en `IsolateHolderService.kt` atrapan `Exception` y no hacen nada con ella — exactamente
-el patrón que causó que el bug de "plugins no registrados" (arriba) fuera invisible durante mucho
-tiempo:
+`IsolateHolderService.kt` tenía dos `catch (e: Exception) { }` vacíos — exactamente el patrón que
+causó que el bug de "plugins no registrados" (arriba) fuera invisible durante mucho tiempo. Ambos
+ahora loguean con `Log.e`, mismo criterio que `registerAppPlugins` (`docs/android.md`):
 
-- `onMethodCall` (~línea 278): `catch (e: Exception) { }` — si `METHOD_SERVICE_INITIALIZED` u otro
-  método falla acá, no queda ningún rastro en logcat.
-- `onLocationUpdated` (~línea 325): `catch (e: Exception) { }` — si `PreferencesManager
-  .getCallbackHandle` devuelve `null` (cast `as Long` fallando) o `sendLocationEvent` falla,
-  ninguna ubicación llega al callback del usuario y no hay ninguna señal de por qué.
+- `onMethodCall` — si `METHOD_SERVICE_INITIALIZED` u otro método falla, antes no quedaba ningún
+  rastro en logcat. Ahora: `Log.e("IsolateHolderService", "onMethodCall failed for ${call.method}", e)`.
+- `onLocationUpdated` — si `PreferencesManager.getCallbackHandle` devuelve `null` (cast `as Long`
+  fallando) o `sendLocationEvent` falla, ninguna ubicación llegaba al callback del usuario y no
+  había ninguna señal de por qué. Ahora: `Log.e("IsolateHolderService", "onLocationUpdated failed
+  to dispatch $location", e)`.
 
-Si alguna vez hay que debuggear "no me llega nada al callback pero el servicio arranca bien",
-estos dos `catch` son sospechosos directos — agregar `Log.e(..., e)` ahí (como ya se hizo en
-`registerAppPlugins`, ver `docs/android.md`) antes de asumir que el problema está en otro lado.
+Si en el futuro se agrega un `catch` nuevo en código nativo de este repo, seguir el mismo patrón
+— nunca un `catch` mudo (ver `CLAUDE.md` § Convenciones).
+
+## Optimizaciones aplicadas (rama `major-update`)
+
+- **`PreferencesManager.saveSettings()` — 18 `.apply()` a 1**: guardaba cada clave del `Map` de
+  settings con su propio `sharedPreferences.edit()....apply()` — hasta 11 escrituras a disco
+  separadas por cada `registerLocationUpdate()`. Ahora arma un solo `editor` y llama `.apply()`
+  una vez al final. Mismo resultado, menos I/O — `SharedPreferences.Editor` ya soporta encadenar
+  todos los `put*` antes de aplicar.
+- **Dependencia `com.google.android.material:material:1.0.0` eliminada**
+  (`android/build.gradle`) — sin ningún uso real en `android/src/` (verificado con `grep`). Es una
+  dependencia de UI que un plugin sin UI propia (todo el trabajo pasa por `MethodChannel` y un
+  foreground service) no debería arrastrar al build de cada consumidor.
 
 ## `example/` no resuelve en un SDK Dart moderno — usar `--no-example`
 

@@ -1,16 +1,16 @@
 import 'dart:async';
 import 'dart:ui';
 
-import 'package:background_locator_2/settings/android_settings.dart';
-import 'package:background_locator_2/settings/ios_settings.dart';
-import 'package:background_locator_2/utils/settings_util.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import 'auto_stop_handler.dart';
-import 'callback_dispatcher.dart';
-import 'keys.dart';
-import 'location_dto.dart';
+import 'package:background_locator_2/auto_stop_handler.dart';
+import 'package:background_locator_2/callback_dispatcher.dart';
+import 'package:background_locator_2/keys.dart';
+import 'package:background_locator_2/location_dto.dart';
+import 'package:background_locator_2/settings/android_settings.dart';
+import 'package:background_locator_2/settings/ios_settings.dart';
+import 'package:background_locator_2/utils/settings_util.dart';
 
 class BackgroundLocator {
   static const MethodChannel _channel = const MethodChannel(Keys.CHANNEL_ID);

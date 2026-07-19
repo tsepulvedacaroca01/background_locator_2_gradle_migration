@@ -43,10 +43,12 @@ class SettingsUtil {
       args[Keys.ARG_INIT_CALLBACK] =
           PluginUtilities.getCallbackHandle(initCallback)!.toRawHandle();
     }
+
     if (disposeCallback != null) {
       args[Keys.ARG_DISPOSE_CALLBACK] =
           PluginUtilities.getCallbackHandle(disposeCallback)!.toRawHandle();
     }
+
     if (initDataCallback != null) {
       args[Keys.ARG_INIT_DATA_CALLBACK] = initDataCallback;
     }

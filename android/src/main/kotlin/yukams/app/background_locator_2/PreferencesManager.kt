@@ -24,78 +24,44 @@ class PreferencesManager {
         fun saveSettings(context: Context, map: Map<Any, Any>) {
             val sharedPreferences =
                     context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-
-            val callback = map[Keys.ARG_CALLBACK] as Number
-            sharedPreferences.edit()
-                    .putLong(Keys.ARG_CALLBACK,
-                            callback.toLong())
-                    .apply()
-
-            if (map[Keys.ARG_NOTIFICATION_CALLBACK] as? Long != null) {
-                sharedPreferences.edit()
-                        .putLong(Keys.ARG_NOTIFICATION_CALLBACK,
-                                map[Keys.ARG_NOTIFICATION_CALLBACK] as Long)
-                        .apply()
-            }
-
             val settings = map[Keys.ARG_SETTINGS] as Map<*, *>
+            val callback = map[Keys.ARG_CALLBACK] as Number
 
-            sharedPreferences.edit()
+            // Un solo editor para las 11 claves — antes cada `put` tenía su propio
+            // `.edit().apply()`, es decir 10-11 escrituras a disco separadas para
+            // guardar un único registro de settings.
+            val editor = sharedPreferences.edit()
+                    .putLong(Keys.ARG_CALLBACK, callback.toLong())
                     .putString(Keys.SETTINGS_ANDROID_NOTIFICATION_CHANNEL_NAME,
                             settings[Keys.SETTINGS_ANDROID_NOTIFICATION_CHANNEL_NAME] as String)
-                    .apply()
-
-            sharedPreferences.edit()
                     .putString(Keys.SETTINGS_ANDROID_NOTIFICATION_TITLE,
                             settings[Keys.SETTINGS_ANDROID_NOTIFICATION_TITLE] as String)
-                    .apply()
-
-            sharedPreferences.edit()
                     .putString(Keys.SETTINGS_ANDROID_NOTIFICATION_MSG,
                             settings[Keys.SETTINGS_ANDROID_NOTIFICATION_MSG] as String)
-                    .apply()
-
-            sharedPreferences.edit()
                     .putString(Keys.SETTINGS_ANDROID_NOTIFICATION_BIG_MSG,
                             settings[Keys.SETTINGS_ANDROID_NOTIFICATION_BIG_MSG] as String)
-                    .apply()
-
-            sharedPreferences.edit()
                     .putString(Keys.SETTINGS_ANDROID_NOTIFICATION_ICON,
                             settings[Keys.SETTINGS_ANDROID_NOTIFICATION_ICON] as String)
-                    .apply()
-
-            sharedPreferences.edit()
                     .putLong(Keys.SETTINGS_ANDROID_NOTIFICATION_ICON_COLOR,
                             settings[Keys.SETTINGS_ANDROID_NOTIFICATION_ICON_COLOR] as Long)
-                    .apply()
-
-            sharedPreferences.edit()
-                    .putInt(Keys.SETTINGS_INTERVAL,
-                            settings[Keys.SETTINGS_INTERVAL] as Int)
-                    .apply()
-
-            sharedPreferences.edit()
-                    .putInt(Keys.SETTINGS_ACCURACY,
-                            settings[Keys.SETTINGS_ACCURACY] as Int)
-                    .apply()
-
-            sharedPreferences.edit()
+                    .putInt(Keys.SETTINGS_INTERVAL, settings[Keys.SETTINGS_INTERVAL] as Int)
+                    .putInt(Keys.SETTINGS_ACCURACY, settings[Keys.SETTINGS_ACCURACY] as Int)
                     .putFloat(Keys.SETTINGS_DISTANCE_FILTER,
                             (settings[Keys.SETTINGS_DISTANCE_FILTER] as Double).toFloat())
-                    .apply()
-
-            if (settings.containsKey(Keys.SETTINGS_ANDROID_WAKE_LOCK_TIME)) {
-                sharedPreferences.edit()
-                        .putInt(Keys.SETTINGS_ANDROID_WAKE_LOCK_TIME,
-                                settings[Keys.SETTINGS_ANDROID_WAKE_LOCK_TIME] as Int)
-                        .apply()
-            }
-
-            sharedPreferences.edit()
                     .putInt(Keys.SETTINGS_ANDROID_LOCATION_CLIENT,
                             settings[Keys.SETTINGS_ANDROID_LOCATION_CLIENT] as Int)
-                    .apply()
+
+            if (map[Keys.ARG_NOTIFICATION_CALLBACK] as? Long != null) {
+                editor.putLong(Keys.ARG_NOTIFICATION_CALLBACK,
+                        map[Keys.ARG_NOTIFICATION_CALLBACK] as Long)
+            }
+
+            if (settings.containsKey(Keys.SETTINGS_ANDROID_WAKE_LOCK_TIME)) {
+                editor.putInt(Keys.SETTINGS_ANDROID_WAKE_LOCK_TIME,
+                        settings[Keys.SETTINGS_ANDROID_WAKE_LOCK_TIME] as Int)
+            }
+
+            editor.apply()
         }
 
         @JvmStatic
